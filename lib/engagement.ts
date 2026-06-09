@@ -128,3 +128,37 @@ export async function memberHistory(memberNumber: string): Promise<DecisionRow[]
   const { data } = await sb.from('em_messages').select('*').eq('member_number', memberNumber).order('decided_at', { ascending: false })
   return (data ?? []) as DecisionRow[]
 }
+
+export type DayActivity = { date: string; reviews: number; approved: number; skipped: number }
+export type Totals = { reviews: number; approved: number; skipped: number }
+export type Analytics = { daily: DayActivity[]; last7: Totals; prev7: Totals }
+
+// Real manager analytics from the decision log (last 30 days).
+export async function getAnalytics(): Promise<Analytics> {
+  const sb = createServerSupabase()
+  const since = new Date(Date.now() - 30 * 86400000).toISOString()
+  const { data } = await sb.from('em_messages').select('decision, decided_at').gte('decided_at', since)
+
+  // last 30 calendar days, zero-filled
+  const days: Record<string, DayActivity> = {}
+  const order: string[] = []
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10)
+    days[d] = { date: d, reviews: 0, approved: 0, skipped: 0 }
+    order.push(d)
+  }
+  for (const m of data ?? []) {
+    const day = String((m as any).decided_at).slice(0, 10)
+    const bucket = days[day]
+    if (!bucket) continue
+    bucket.reviews++
+    if ((m as any).decision === 'approved') bucket.approved++
+    else bucket.skipped++
+  }
+  const daily = order.map(d => days[d])
+  const sum = (slice: DayActivity[]): Totals => slice.reduce(
+    (t, d) => ({ reviews: t.reviews + d.reviews, approved: t.approved + d.approved, skipped: t.skipped + d.skipped }),
+    { reviews: 0, approved: 0, skipped: 0 },
+  )
+  return { daily, last7: sum(daily.slice(-7)), prev7: sum(daily.slice(-14, -7)) }
+}

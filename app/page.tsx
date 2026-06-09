@@ -1,8 +1,10 @@
 import { redirect } from 'next/navigation'
 import { getLiveSessionUser } from '@/lib/auth'
 import { accessFor, TOOL } from '@/lib/access'
-import { buildQueue, recentDecisions, type QueueItem, type DecisionRow } from '@/lib/engagement'
+import { buildQueue, recentDecisions, getAnalytics, type QueueItem, type DecisionRow, type Analytics } from '@/lib/engagement'
 import EngagementMonitor from './engagement-client'
+
+const EMPTY_ANALYTICS: Analytics = { daily: [], last7: { reviews: 0, approved: 0, skipped: 0 }, prev7: { reviews: 0, approved: 0, skipped: 0 } }
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +16,7 @@ export default async function Page() {
 
   let items: QueueItem[] = []
   let decisions: DecisionRow[] = []
+  let analytics: Analytics = EMPTY_ANALYTICS
   let hasMembers = false
   let hasConfig = false
   let tablesMissing = false
@@ -21,6 +24,7 @@ export default async function Page() {
     const q = await buildQueue()
     items = q.items; hasMembers = q.hasMembers; hasConfig = q.hasConfig
     decisions = await recentDecisions(20)
+    analytics = await getAnalytics()
   } catch {
     tablesMissing = true // schema not created yet
   }
@@ -29,6 +33,7 @@ export default async function Page() {
     <EngagementMonitor
       items={items}
       decisions={decisions}
+      analytics={analytics}
       hasMembers={hasMembers}
       hasConfig={hasConfig}
       tablesMissing={tablesMissing}

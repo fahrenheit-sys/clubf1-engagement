@@ -1,7 +1,7 @@
 'use client'
 import { useState, useMemo, useTransition, type CSSProperties, type ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import type { QueueItem, DecisionRow } from '@/lib/engagement'
+import type { QueueItem, DecisionRow, Analytics } from '@/lib/engagement'
 import { UI } from '@/lib/theme'
 import { importCsv, decide, draft } from './actions'
 
@@ -19,8 +19,8 @@ function daysSince(s: string | null): number | null {
   return (Date.now() - d) / 86400000
 }
 
-export default function EngagementMonitor({ items, decisions, hasMembers, hasConfig, tablesMissing, isAdmin, userEmail }: {
-  items: QueueItem[]; decisions: DecisionRow[]; hasMembers: boolean; hasConfig: boolean; tablesMissing: boolean; isAdmin: boolean; userEmail: string
+export default function EngagementMonitor({ items, decisions, analytics, hasMembers, hasConfig, tablesMissing, isAdmin, userEmail }: {
+  items: QueueItem[]; decisions: DecisionRow[]; analytics: Analytics; hasMembers: boolean; hasConfig: boolean; tablesMissing: boolean; isAdmin: boolean; userEmail: string
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -36,6 +36,7 @@ export default function EngagementMonitor({ items, decisions, hasMembers, hasCon
   const [done, setDone] = useState<Record<string, string>>({})
   const [importMsg, setImportMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [tab, setTab] = useState<'trainer' | 'manager'>('trainer')
 
   const card: CSSProperties = { background: UI.surface, border: `1px solid ${UI.border}`, borderRadius: UI.radius, boxShadow: UI.shadow }
   const input: CSSProperties = { background: UI.surface, border: `1px solid ${UI.borderStrong}`, borderRadius: UI.radiusSm, padding: '8px 11px', color: UI.text, fontSize: 13, outline: 'none' }
@@ -133,6 +134,13 @@ export default function EngagementMonitor({ items, decisions, hasMembers, hasCon
           </div>
         ) : (
           <>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+              {(['trainer', 'manager'] as const).map(t => (
+                <button key={t} onClick={() => setTab(t)} style={{ padding: '8px 18px', borderRadius: 999, border: `1px solid ${tab === t ? ACCENT : UI.borderStrong}`, background: tab === t ? ACCENT : UI.surface, color: tab === t ? '#fff' : UI.text, fontSize: 13, fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize' }}>{t}</button>
+              ))}
+            </div>
+            {tab === 'manager' ? <ManagerView analytics={analytics} items={items} /> : (
+            <>
             {/* Metrics */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 18 }}>
               {([['Members', counts.total, UI.text], ['High risk', counts.High, LEVEL_COLOR.High], ['Medium', counts.Medium, LEVEL_COLOR.Medium], ['Low', counts.Low, LEVEL_COLOR.Low]] as const).map(([label, n, color]) => (
@@ -243,8 +251,92 @@ export default function EngagementMonitor({ items, decisions, hasMembers, hasCon
                 </div>
               </div>
             )}
+            </>
+            )}
           </>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ── Manager view ──────────────────────────────────────────
+function ManagerView({ analytics, items }: { analytics: Analytics; items: QueueItem[] }) {
+  const card: CSSProperties = { background: UI.surface, border: `1px solid ${UI.border}`, borderRadius: UI.radius, boxShadow: UI.shadow }
+  const dist = { High: 0, Medium: 0, Low: 0 }
+  let sum = 0
+  for (const it of items) { dist[it.level]++; sum += it.score }
+  const avg = items.length ? Math.round(sum / items.length) : 0
+  const total = items.length || 1
+
+  const { last7, prev7, daily } = analytics
+  const pct = (cur: number, prev: number) => (prev > 0 ? Math.round(((cur - prev) / prev) * 100) : cur > 0 ? 100 : 0)
+  const recent = daily.slice(-14)
+  const maxDay = Math.max(1, ...recent.map(d => d.reviews))
+
+  const metric = (label: string, value: string | number, delta: number | null, goodWhenUp = true) => {
+    const color = delta === null ? UI.textFaint : (delta > 0 === goodWhenUp ? LEVEL_COLOR.Low : delta === 0 ? UI.textFaint : LEVEL_COLOR.High)
+    return (
+      <div style={{ ...card, padding: '16px 18px' }}>
+        <div style={{ fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: UI.textFaint }}>{label}</div>
+        <div style={{ fontSize: 28, fontWeight: 600, color: UI.text, marginTop: 6 }}>{value}</div>
+        {delta !== null && <div style={{ fontSize: 12, color, marginTop: 2 }}>{delta > 0 ? '▲' : delta < 0 ? '▼' : '—'} {Math.abs(delta)}% vs prev 7d</div>}
+      </div>
+    )
+  }
+
+  const exportCsv = () => {
+    const head = ['Member Number', 'Name', 'Risk Score', 'Risk Level', 'Top Tags']
+    const rows = [...items].map(it => [it.memberNumber, it.name, String(it.score), it.level, it.matchedTags.map(t => t.tag).join('; ')])
+    const csv = [head, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'engagement_report.csv'; a.click(); URL.revokeObjectURL(a.href)
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ fontSize: 12.5, color: UI.textMuted }}>Activity for the last 7 rolling days · risk snapshot is current</div>
+        <button onClick={exportCsv} style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${UI.borderStrong}`, background: UI.surface, color: UI.text, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>⬇ Export report (CSV)</button>
+      </div>
+
+      {/* 7-day activity metrics */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 18 }}>
+        {metric('Reviews (7d)', last7.reviews, pct(last7.reviews, prev7.reviews), true)}
+        {metric('Approved / sent (7d)', last7.approved, pct(last7.approved, prev7.approved), true)}
+        {metric('Skipped (7d)', last7.skipped, pct(last7.skipped, prev7.skipped), false)}
+        {metric('Avg risk (now)', avg, null)}
+      </div>
+
+      {/* Risk distribution */}
+      <div style={{ ...card, padding: 20, marginBottom: 18 }}>
+        <div style={{ fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase', color: UI.textFaint, marginBottom: 12 }}>Risk distribution · {items.length} members</div>
+        <div style={{ display: 'flex', height: 26, borderRadius: 8, overflow: 'hidden', border: `1px solid ${UI.border}` }}>
+          {(['High', 'Medium', 'Low'] as const).map(l => dist[l] > 0 && (
+            <div key={l} title={`${l}: ${dist[l]}`} style={{ width: `${(dist[l] / total) * 100}%`, background: LEVEL_COLOR[l], color: '#fff', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{dist[l]}</div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 18, marginTop: 10, fontSize: 12, color: UI.textMuted }}>
+          {(['High', 'Medium', 'Low'] as const).map(l => <span key={l}><span style={{ color: LEVEL_COLOR[l], fontWeight: 700 }}>●</span> {l}: {dist[l]}</span>)}
+        </div>
+      </div>
+
+      {/* Daily activity (14d) */}
+      <div style={{ ...card, padding: 20 }}>
+        <div style={{ fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase', color: UI.textFaint, marginBottom: 16 }}>Daily activity · last 14 days</div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 120 }}>
+          {recent.map(d => (
+            <div key={d.date} title={`${d.date}: ${d.approved} approved, ${d.skipped} skipped`} style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', gap: 2 }}>
+              <div style={{ width: '70%', height: `${(d.approved / maxDay) * 96}px`, background: LEVEL_COLOR.Low, borderRadius: '3px 3px 0 0' }} />
+              <div style={{ width: '70%', height: `${(d.skipped / maxDay) * 96}px`, background: LEVEL_COLOR.Medium }} />
+              <div style={{ fontSize: 8, color: UI.textFaint }}>{d.date.slice(5)}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 18, marginTop: 12, fontSize: 12, color: UI.textMuted }}>
+          <span><span style={{ color: LEVEL_COLOR.Low, fontWeight: 700 }}>■</span> Approved</span>
+          <span><span style={{ color: LEVEL_COLOR.Medium, fontWeight: 700 }}>■</span> Skipped</span>
+        </div>
       </div>
     </div>
   )
