@@ -131,7 +131,21 @@ export async function memberHistory(memberNumber: string): Promise<DecisionRow[]
 
 export type DayActivity = { date: string; reviews: number; approved: number; skipped: number }
 export type Totals = { reviews: number; approved: number; skipped: number }
-export type Analytics = { daily: DayActivity[]; last7: Totals; prev7: Totals }
+export type RiskPoint = { date: string; avg: number }
+export type Analytics = { daily: DayActivity[]; last7: Totals; prev7: Totals; riskTrend: RiskPoint[] }
+
+// Placeholder 30-day average-risk-score history (deterministic, declining with
+// noise) until daily snapshots are persisted (see em_risk_snapshots / cron).
+function dummyRiskTrend(dates: string[]): RiskPoint[] {
+  const n = dates.length
+  return dates.map((date, i) => {
+    const t = n > 1 ? i / (n - 1) : 0
+    const base = 50 - 26 * t // gentle downward trend ~50 → ~24
+    const seed = ((i * 9301 + 49297) % 233280) / 233280 // stable per-day noise
+    const avg = Math.max(0, Math.min(100, Math.round(base + (seed - 0.5) * 22)))
+    return { date, avg }
+  })
+}
 
 // Real manager analytics from the decision log (last 30 days).
 export async function getAnalytics(): Promise<Analytics> {
@@ -160,5 +174,5 @@ export async function getAnalytics(): Promise<Analytics> {
     (t, d) => ({ reviews: t.reviews + d.reviews, approved: t.approved + d.approved, skipped: t.skipped + d.skipped }),
     { reviews: 0, approved: 0, skipped: 0 },
   )
-  return { daily, last7: sum(daily.slice(-7)), prev7: sum(daily.slice(-14, -7)) }
+  return { daily, last7: sum(daily.slice(-7)), prev7: sum(daily.slice(-14, -7)), riskTrend: dummyRiskTrend(order) }
 }

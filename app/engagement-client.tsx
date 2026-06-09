@@ -1,6 +1,7 @@
 'use client'
 import { useState, useMemo, useTransition, type CSSProperties, type ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine, ResponsiveContainer } from 'recharts'
 import type { QueueItem, DecisionRow, Analytics } from '@/lib/engagement'
 import { UI } from '@/lib/theme'
 import { importCsv, decide, draft } from './actions'
@@ -269,10 +270,19 @@ function ManagerView({ analytics, items }: { analytics: Analytics; items: QueueI
   const avg = items.length ? Math.round(sum / items.length) : 0
   const total = items.length || 1
 
-  const { last7, prev7, daily } = analytics
+  const { last7, prev7, daily, riskTrend } = analytics
   const pct = (cur: number, prev: number) => (prev > 0 ? Math.round(((cur - prev) / prev) * 100) : cur > 0 ? 100 : 0)
   const recent = daily.slice(-14)
   const maxDay = Math.max(1, ...recent.map(d => d.reviews))
+
+  // Linear least-squares trend line over the 30-day risk series.
+  const n = riskTrend.length
+  let sx = 0, sy = 0, sxx = 0, sxy = 0
+  riskTrend.forEach((p, i) => { sx += i; sy += p.avg; sxx += i * i; sxy += i * p.avg })
+  const slope = n > 1 ? (n * sxy - sx * sy) / (n * sxx - sx * sx) : 0
+  const intercept = n ? (sy - slope * sx) / n : 0
+  const shortDate = (d: string) => { const x = new Date(d); return isNaN(x.getTime()) ? d : x.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) }
+  const trendData = riskTrend.map((p, i) => ({ date: shortDate(p.date), avg: p.avg, trend: Math.round((intercept + slope * i) * 10) / 10 }))
 
   const metric = (label: string, value: string | number, delta: number | null, goodWhenUp = true) => {
     const color = delta === null ? UI.textFaint : (delta > 0 === goodWhenUp ? LEVEL_COLOR.Low : delta === 0 ? UI.textFaint : LEVEL_COLOR.High)
@@ -307,6 +317,27 @@ function ManagerView({ analytics, items }: { analytics: Analytics; items: QueueI
         {metric('Skipped (7d)', last7.skipped, pct(last7.skipped, prev7.skipped), false)}
         {metric('Avg risk (now)', avg, null)}
       </div>
+
+      {/* 30-day risk trend */}
+      {trendData.length > 0 && (
+        <div style={{ ...card, padding: 20, marginBottom: 18 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: UI.text, marginBottom: 4 }}>📈 Average Risk Score Trend (Last 30 Days)</div>
+          <div style={{ fontSize: 11, color: UI.textFaint, marginBottom: 14 }}>Member risk score trends (sample history — live snapshots coming via a daily job)</div>
+          <ResponsiveContainer width="100%" height={340}>
+            <LineChart data={trendData} margin={{ top: 8, right: 70, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke={UI.border} vertical={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: UI.textFaint }} axisLine={false} tickLine={false} minTickGap={28} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: UI.textFaint }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: `1px solid ${UI.border}` }} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <ReferenceLine y={70} stroke={LEVEL_COLOR.High} strokeDasharray="2 4" label={{ value: 'High Risk', position: 'insideTopRight', fontSize: 10, fill: LEVEL_COLOR.High }} />
+              <ReferenceLine y={30} stroke={LEVEL_COLOR.Medium} strokeDasharray="2 4" label={{ value: 'Medium Risk', position: 'insideTopRight', fontSize: 10, fill: LEVEL_COLOR.Medium }} />
+              <Line type="monotone" dataKey="avg" name="Average Risk Score" stroke="#2563EB" strokeWidth={2.5} dot={{ r: 2 }} />
+              <Line type="monotone" dataKey="trend" name="Trend Line" stroke="#DC2626" strokeWidth={2} strokeDasharray="6 4" dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {/* Risk distribution */}
       <div style={{ ...card, padding: 20, marginBottom: 18 }}>

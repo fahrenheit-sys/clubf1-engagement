@@ -4,7 +4,7 @@ import { accessFor, TOOL } from '@/lib/access'
 import { buildQueue, recentDecisions, getAnalytics, type QueueItem, type DecisionRow, type Analytics } from '@/lib/engagement'
 import EngagementMonitor from './engagement-client'
 
-const EMPTY_ANALYTICS: Analytics = { daily: [], last7: { reviews: 0, approved: 0, skipped: 0 }, prev7: { reviews: 0, approved: 0, skipped: 0 } }
+const EMPTY_ANALYTICS: Analytics = { daily: [], last7: { reviews: 0, approved: 0, skipped: 0 }, prev7: { reviews: 0, approved: 0, skipped: 0 }, riskTrend: [] }
 
 export const dynamic = 'force-dynamic'
 
