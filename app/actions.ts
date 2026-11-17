@@ -101,7 +101,7 @@ export async function draft(input: {
     const text = await askClaude({
       model: MODELS.chat,
       maxTokens: 300,
-      system: 'You write warm, concise retention SMS messages for a premium gym (Fahrenheit One). One message, under ~300 characters, friendly and human, no emojis unless natural, no hashtags. Address the member by first name. Return ONLY the message text.',
+      system: 'You write warm, concise retention SMS messages for a premium gym (The Grandstand). One message, under ~300 characters, friendly and human, no emojis unless natural, no hashtags. Address the member by first name. Return ONLY the message text.',
       messages: [{
         role: 'user',
         content: `Member first name: ${input.firstName}\nEngagement situation: ${input.condition ?? 'general check-in'}\nCurrent tags: ${input.tags.join(', ') || 'none'}\nBase template to adapt: "${input.baseMessage}"\n\nRewrite this as a personalised SMS for ${input.firstName}.`,

@@ -115,8 +115,8 @@ export default function EngagementMonitor({ items, decisions, analytics, hasMemb
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 32px', background: UI.surface, borderBottom: `1px solid ${UI.border}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/fahrenheit-one-logo.png" alt="Fahrenheit One" style={{ height: 26, width: 'auto' }} />
-          <div style={{ fontSize: 16, fontWeight: 600, color: UI.text }}>Engagement Monitor</div>
+          <img src="/grandstand-lockup-plum.png" alt="The Grandstand" style={{ height: 34, width: 'auto' }} />
+          <div style={{ fontSize: 16, fontWeight: 600, color: UI.text }}>My Engagement Monitor</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <a href="https://clubf1.tech/" style={{ fontSize: 13, color: UI.textMuted, textDecoration: 'none' }}>← Hub</a>

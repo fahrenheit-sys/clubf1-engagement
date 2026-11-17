@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Engagement Monitor — Fahrenheit One',
+  title: 'My Engagement Monitor — The Grandstand',
   description: 'Member engagement & at-risk monitor — risk scoring, suggested comms, trainer approval.',
 }
 
