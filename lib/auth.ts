@@ -47,7 +47,7 @@ export async function requireEngagementAccess(level: 'admin' | 'member' = 'membe
   const user = await getLiveSessionUser()
   if (!user) throw new Error('Not authenticated')
   const role = accessFor(user, TOOL)
-  if (!role) throw new Error('No access to My Engagement Monitor')
+  if (!role) throw new Error('No access to TGS Engagement Monitor')
   if (level === 'admin' && role !== 'admin') throw new Error('Admin access required')
   return user
 }
